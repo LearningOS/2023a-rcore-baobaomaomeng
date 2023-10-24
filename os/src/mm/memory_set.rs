@@ -262,6 +262,55 @@ impl MemorySet {
             false
         }
     }
+
+    ///将一片虚拟地址与物理地址绑定
+    pub fn mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
+        let vpn_start: VirtPageNum = VirtAddr(start).floor();
+        let vpn_end: VirtPageNum = VirtAddr(start + len).ceil();
+        let vpn_range = VPNRange::new(vpn_start, vpn_end);
+        
+        //检查是否都可用
+        for vpn in vpn_range {
+            if let Some(pte) = self.page_table.find_pte(vpn) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+        }
+
+        let permission = MapPermission::from_bits((port as u8) << 1).unwrap() | MapPermission::U;
+        self.insert_framed_area(
+            VirtAddr::from(start),
+            VirtAddr::from(start + len),
+            permission,
+        );
+        0
+    }
+
+    ///将一片虚拟地址与物理地址解榜
+    pub fn munmap(&mut self, start: usize, len: usize) -> isize {
+        let vpn_start: VirtPageNum = VirtAddr(start).floor();
+        let vpn_end: VirtPageNum = VirtAddr(start + len).ceil();
+        let vpn_range = VPNRange::new(vpn_start, vpn_end);
+
+        //检查是否都可用
+        for vpn in vpn_range {
+            let pte = self.page_table.find_pte(vpn);
+            if pte.is_none() || !pte.unwrap().is_valid() {
+                return -1;
+            }
+        }
+
+        //解绑
+        for vpn in vpn_range {
+            for area in &mut self.areas {
+                if vpn >= area.vpn_range.get_start() && vpn <= area.vpn_range.get_end() {
+                    area.unmap_one(&mut self.page_table, vpn);
+                }
+            }
+        }
+        0
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

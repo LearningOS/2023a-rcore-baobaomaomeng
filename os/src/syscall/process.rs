@@ -2,8 +2,8 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
-    },
+        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus, current_user_token, TASK_MANAGER
+    }, timer::get_time_us, mm:: va2pa,
 };
 
 #[repr(C)]
@@ -43,7 +43,17 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let tz = get_time_us();
+    let ts_pa = va2pa(current_user_token(), _ts as *const u8) as *mut TimeVal;
+
+    unsafe {
+        (*ts_pa) = TimeVal {
+            sec: tz / 1000000,
+            usec: tz % 1000000,
+        }
+    }
+
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -51,19 +61,31 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    -1
+
+    let ti_pa = va2pa(current_user_token(), _ti as *const u8) as *mut TaskInfo;
+
+    unsafe {
+        (*ti_pa).status = TASK_MANAGER.get_task_status();
+        (*ti_pa).time = (get_time_us() - TASK_MANAGER.get_startime()) / 1000;
+        (*ti_pa).syscall_times = TASK_MANAGER.get_syscall_num();
+    }
+    0
 }
 
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    if _start & 0xfff != 0 || _port & !0x7 != 0 || _port & 0x7 == 0{
+        return -1;
+    }
+    TASK_MANAGER.mmap(_start, _len, _port)
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    if _start & 0xfff != 0 {
+        return -1;
+    }
+    TASK_MANAGER.munmap(_start, _len)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

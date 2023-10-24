@@ -10,10 +10,10 @@ mod address;
 mod frame_allocator;
 mod heap_allocator;
 mod memory_set;
-mod page_table;
+pub(crate) mod page_table;
 
 pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
-use address::{StepByOne, VPNRange};
+pub use address::{StepByOne, VPNRange};
 pub use frame_allocator::{frame_alloc, FrameTracker};
 pub use memory_set::remap_test;
 pub use memory_set::{kernel_stack_position, MapPermission, MemorySet, KERNEL_SPACE};
@@ -25,4 +25,14 @@ pub fn init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
     KERNEL_SPACE.exclusive_access().activate();
+}
+
+/// 虚拟地址转物理地址
+pub fn va2pa(token: usize, ptr: *const u8) -> usize {
+    let page_table = PageTable::from_token(token);
+    let va: VirtAddr = (ptr as usize).into();
+    let ppn: PhysPageNum = page_table.find_pte(va.into()).unwrap().ppn();
+    let mut pa: PhysAddr = ppn.into();
+    pa.0 += va.page_offset();
+    pa.into()
 }

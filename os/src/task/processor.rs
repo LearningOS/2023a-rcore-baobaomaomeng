@@ -7,7 +7,9 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::config::MAX_SYSCALL_NUM;
 use crate::sync::UPSafeCell;
+
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -44,9 +46,11 @@ impl Processor {
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
+
 }
 
 lazy_static! {
+    ///为什么这里需要注释
     pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
 }
 
@@ -68,12 +72,69 @@ pub fn run_tasks() {
             // release processor manually
             drop(processor);
             unsafe {
+                //println!("switch");
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
         } else {
             warn!("no tasks available in run_tasks");
         }
     }
+}
+
+#[allow(unused, missing_docs)]
+pub fn get_task_status() -> TaskStatus {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_status()
+}
+
+#[allow(unused, missing_docs)]
+pub fn get_startime() -> usize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_startime()
+}
+
+#[allow(unused, missing_docs)]
+pub fn get_syscall_num() -> [u32; MAX_SYSCALL_NUM] {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_syscall_num()
+}
+
+#[allow(unused, missing_docs)]
+pub fn add_syscall_times(syscall_id: usize) {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .add_syscall_times(syscall_id)
+}
+
+#[allow(unused, missing_docs)]
+pub fn mmap(start: usize, len: usize, port: usize) -> isize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .mmap(start, len, port)
+}
+
+#[allow(unused, missing_docs)]
+pub fn munmap(start: usize, len: usize) -> isize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .munmap(start, len)
+}
+
+///设置优先级
+pub fn set_priority(prio:isize)->isize{
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .set_priority(prio)
 }
 
 /// Get current task through take, leaving a None in its place

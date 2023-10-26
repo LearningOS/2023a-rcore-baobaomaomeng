@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -34,6 +34,8 @@ impl TaskControlBlock {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
     }
+
+    
 }
 
 pub struct TaskControlBlockInner {
@@ -68,6 +70,18 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// 系统调用次数
+    pub syscall_times: [u32;MAX_SYSCALL_NUM],
+
+    ///程序开始的时间
+    pub star_time: usize,
+
+    ///运行长度
+    pub stride:isize,
+
+    ///优先级
+    pub priority:isize,
 }
 
 impl TaskControlBlockInner {
@@ -79,11 +93,44 @@ impl TaskControlBlockInner {
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
     }
-    fn get_status(&self) -> TaskStatus {
+    pub fn get_status(&self) -> TaskStatus {
         self.task_status
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+
+    pub fn set_priority(&mut self,_prio: isize)->isize{
+        self.priority = _prio;
+        self.priority
+    }
+
+    /// 增加系统调用次数
+    pub fn add_syscall_times(&mut self, syscall_id: usize) {
+        self.syscall_times[syscall_id] += 1;
+    }
+
+    /// 获得函数调用次数
+    pub fn get_syscall_num(&self) -> [u32; MAX_SYSCALL_NUM]{
+        self.syscall_times
+    }
+    /// 获取程序运行状态
+    pub fn get_task_status(&self) -> TaskStatus {
+        self.task_status
+    }
+    ///返回程序运行时间
+    pub fn get_startime(&self) -> usize{
+        self.star_time
+    }
+
+    /// 映射物理地址
+    pub fn mmap(&mut self,start: usize, len: usize, port: usize) -> isize {
+        self.memory_set.mmap(start, len, port)
+    }
+
+    /// 解绑物理地址
+    pub fn munmap(&mut self,_start: usize, _len: usize) -> isize {
+        self.memory_set.munmap(_start, _len)
     }
 }
 
@@ -118,8 +165,13 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    star_time: 0,
+                    syscall_times: [0;MAX_SYSCALL_NUM],
+                    stride: 0,
+                    priority: 16,
                 })
             },
+            
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
@@ -191,6 +243,10 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    star_time: 0,
+                    syscall_times: [0;MAX_SYSCALL_NUM],
+                    stride: 0,
+                    priority: 16,
                 })
             },
         });

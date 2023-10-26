@@ -15,8 +15,8 @@
 //! might not be what you expect.
 mod context;
 mod id;
-mod manager;
-mod processor;
+pub mod manager;
+pub mod processor;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
@@ -27,6 +27,7 @@ use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
+use crate::config::STRIDE_BIGNUM;
 
 pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
@@ -37,6 +38,7 @@ pub use processor::{
 };
 /// Suspend the current 'Running' task and run the next task in task list.
 pub fn suspend_current_and_run_next() {
+    //println!("s_run_next");
     // There must be an application running.
     let task = take_current_task().unwrap();
 
@@ -45,6 +47,7 @@ pub fn suspend_current_and_run_next() {
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
+    task_inner.stride = task_inner.stride + STRIDE_BIGNUM / task_inner.priority;
     drop(task_inner);
     // ---- release current PCB
 
@@ -59,6 +62,7 @@ pub const IDLE_PID: usize = 0;
 
 /// Exit the current 'Running' task and run the next task in task list.
 pub fn exit_current_and_run_next(exit_code: i32) {
+    //println!("e_run_next");
     // take from Processor
     let task = take_current_task().unwrap();
 

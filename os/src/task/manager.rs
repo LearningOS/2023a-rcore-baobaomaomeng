@@ -1,5 +1,6 @@
 //!Implementation of [`TaskManager`]
 use super::TaskControlBlock;
+
 use crate::sync::UPSafeCell;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
@@ -19,7 +20,13 @@ impl TaskManager {
     }
     /// Add process back to ready queue
     pub fn add(&mut self, task: Arc<TaskControlBlock>) {
-        self.ready_queue.push_back(task);
+        //println!("add");
+        let stride = task.inner_exclusive_access().stride;
+        let idx = self.ready_queue
+        .iter()
+        .position(|task_inner| stride < task_inner.inner_exclusive_access().stride)
+        .unwrap_or_else(|| self.ready_queue.len()); 
+        self.ready_queue.insert(idx, task);
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
@@ -35,12 +42,13 @@ lazy_static! {
 
 /// Add process to ready queue
 pub fn add_task(task: Arc<TaskControlBlock>) {
-    //trace!("kernel: TaskManager::add_task");
+    trace!("kernel: TaskManager::add_task");
     TASK_MANAGER.exclusive_access().add(task);
 }
 
 /// Take a process out of the ready queue
 pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
     //trace!("kernel: TaskManager::fetch_task");
+    //println!("fetch_task");
     TASK_MANAGER.exclusive_access().fetch()
 }

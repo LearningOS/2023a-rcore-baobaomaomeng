@@ -24,3 +24,13 @@ pub fn init() {
     frame_allocator::init_frame_allocator();
     KERNEL_SPACE.exclusive_access().activate();
 }
+
+/// 虚拟地址转物理地址
+pub fn va2pa(token: usize, ptr: *const u8) -> usize {
+    let page_table = PageTable::from_token(token);
+    let va: VirtAddr = (ptr as usize).into();
+    let ppn: PhysPageNum = page_table.find_pte(va.into()).unwrap().ppn();
+    let mut pa: PhysAddr = ppn.into();
+    pa.0 += va.page_offset();
+    pa.into()
+}
